@@ -12,11 +12,11 @@ jobs:
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36"
           for k in company industry; do
             curl -sL -A "$UA" -e https://finance.naver.com/ "https://finance.naver.com/research/${k}_list.naver" -o $k.html -w "$k %{http_code} %{size_download}\n"
-            iconv -f euc-kr -t utf-8 $k.html | grep -n -m3 -E 'type_1|_read.naver' | cut -c1-400
+            cat $k.html | grep -n -m3 -E 'type_1|_read.naver' | cut -c1-400
           done
-          iconv -f euc-kr -t utf-8 company.html | grep -o 'company_read.naver?[^"]*' | head -1 > nid.txt
-          curl -sL -A "$UA" -e https://finance.naver.com/ "https://finance.naver.com/research/$(cat nid.txt)" | iconv -f euc-kr -t utf-8 | grep -n -E '목표가|투자의견|coment|money' | head -8 | cut -c1-300
-          iconv -f euc-kr -t utf-8 company.html | sed -n '/type_1/,/<\/table>/p' | head -60 | cut -c1-300
+          cat company.html | grep -o 'company_read.naver?[^"]*' | head -1 > nid.txt
+          curl -sL -A "$UA" -e https://finance.naver.com/ "https://finance.naver.com/research/$(cat nid.txt)" | cat | grep -n -E '목표가|투자의견|coment|money' | head -8 | cut -c1-300
+          grep -c "" company.html; grep -o -i "charset=[a-z0-9-]*" company.html|head -2; cat company.html | sed -n '/type_1/,/<\/table>/p' | head -45 | cut -c1-300
       - run: |
           git config user.name bot; git config user.email bot@users.noreply.github.com
           git add debug.txt; git commit -m debug-out; git push
