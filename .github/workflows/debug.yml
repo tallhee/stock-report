@@ -10,12 +10,7 @@ jobs:
       - run: |
           exec > debug.txt 2>&1
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36"
-          curl -sL -A "$UA" "https://finance.naver.com/research/company_list.naver" -o c.html
-          grep -o -E '(https?:)?//[a-zA-Z0-9.-]*naver[a-zA-Z0-9./_?=&%-]*(research|Research)[a-zA-Z0-9./_?=&%-]*' c.html | sort -u | head -30
-          grep -o -E '"[a-zA-Z]*(api|Api|API)[^"]{0,120}"' c.html | sort -u | head -30
-          grep -o '__NEXT_DATA__' c.html | head -1
-          python3 -c "import re;t=open('c.html').read();i=t.find('리포트');print(t[max(0,i-300):i+600])"
-          for u in "https://m.stock.naver.com/api/research/company?page=1&pageSize=5" "https://m.stock.naver.com/front-api/research/company?page=1&pageSize=5" "https://stock.naver.com/api/research/company?page=1" ; do echo "== $u"; curl -sL -A "$UA" "$u" | head -c 700; echo; done
+          for u in company/96882 industry?pageSize=2 daily?pageSize=2 market?pageSize=2 invest?pageSize=2 economy?pageSize=2 debenture?pageSize=1; do echo "== $u"; curl -sL -A "$UA" "https://m.stock.naver.com/api/research/$u" | head -c 1500; echo; done
       - run: |
           git config user.name bot; git config user.email bot@users.noreply.github.com
           git add debug.txt; git commit -m debug-out; git push
