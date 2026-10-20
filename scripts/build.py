@@ -126,63 +126,63 @@ def dip_reasons(snap, use_prev=False):
     return reasons
 
 
-# ---------------- 네이버 리서치 ----------------
-BASE = "https://finance.naver.com/research/"
+# ---------------- 네이버 리서치 (m.stock.naver.com JSON) ----------------
+API = "https://m.stock.naver.com/api/research/"
 
 
-def parse_list(kind, limit):
-    url = f"{BASE}{kind}_list.naver"
-    soup = BeautifulSoup(get(url, "euc-kr"), "html.parser")
-    rows = []
-    for tr in soup.select("table.type_1 tr"):
-        tds = tr.find_all("td")
-        if len(tds) < 4:
-            continue
-        title_a = tr.find("a", href=re.compile(r"_read\.naver"))
-        if not title_a:
-            continue
-        pdf_a = tr.find("a", href=re.compile(r"\.pdf", re.I))
-        texts = [td.get_text(" ", strip=True) for td in tds]
-        date = next((t for t in texts if re.fullmatch(r"\d{2}\.\d{2}\.\d{2}", t)), "")
-        idx_title = [i for i, td in enumerate(tds) if title_a in td.find_all("a")]
-        i = idx_title[0] if idx_title else 0
-        row = {
-            "title": title_a.get_text(strip=True),
-            "url": BASE + title_a["href"].lstrip("/").replace("research/", ""),
-            "pdf": pdf_a["href"] if pdf_a else "",
-            "broker": texts[i + 1] if i + 1 < len(texts) else "",
-            "date": date,
-            "category": texts[0] if i > 0 else "",
-        }
-        rows.append(row)
-        if len(rows) >= limit:
-            break
-    return rows
+def api_json(path):
+    return json.loads(get(API + path))
 
 
-def company_detail(row):
+def strip_html(t, n=220):
+    t = re.sub(r"<br\s*/?>|</p>", " ", t or "")
+    t = html.unescape(re.sub(r"<[^>]+>", "", t))
+    t = re.sub(r"\s+", " ", t).strip()
+    return t[:n] + ("…" if len(t) > n else "")
+
+
+def to_int(v):
     try:
-        soup = BeautifulSoup(get(row["url"], "euc-kr"), "html.parser")
-        text = soup.get_text(" ", strip=True)
-        m = re.search(r"목표가\s*([\d,]+)", text)
-        o = re.search(r"투자의견\s*([^\s|]+)", text)
-        row["target"] = int(m.group(1).replace(",", "")) if m else None
-        row["opinion"] = o.group(1) if o else ""
-        stock = soup.find("a", href=re.compile(r"code=\d{6}"))
-        if stock:
-            row["code"] = re.search(r"code=(\d{6})", stock["href"]).group(1)
-    except Exception as e:  # noqa: BLE001
-        print("상세 실패", row["url"], e)
-    return row
+        return int(str(v).replace(",", "")) if v not in (None, "", "0") else None
+    except ValueError:
+        return None
+
+
+def fetch_kind(kind, limit, detail=True):
+    rows = api_json(f"{kind}?page=1&pageSize={limit}")
+    recent = {(TODAY - dt.timedelta(days=d)).isoformat() for d in range(0, 5)}
+    out = []
+    for r in rows:
+        if r.get("writeDate") not in recent:
+            continue
+        item = {
+            "id": r.get("researchId"), "title": r.get("title", ""), "broker": r.get("brokerName", ""),
+            "date": r.get("writeDate", ""), "category": r.get("category", ""),
+            "stock": r.get("itemName", ""), "code": r.get("itemCode", ""),
+            "url": r.get("endUrl", ""), "pdf": "", "summary": "",
+        }
+        if detail:
+            try:
+                d = api_json(f"{kind}/{item['id']}").get("researchContent", {})
+                item["pdf"] = d.get("attachUrl", "")
+                item["summary"] = strip_html(d.get("content"))
+                item["opinion"] = d.get("opinion") or ""
+                item["target"] = to_int(d.get("goalPrice"))
+                item["prev_target"] = to_int(d.get("prevGoalPrice"))
+            except Exception as e:  # noqa: BLE001
+                print("상세 실패", kind, item["id"], e)
+            time.sleep(0.2)
+        out.append(item)
+    return out
 
 
 def classify(op):
     op = (op or "").lower()
-    if any(k in op for k in ["buy", "매수", "outperform", "overweight", "비중확대", "trading buy"]):
+    if any(k in op for k in ["buy", "매수", "outperform", "overweight", "비중확대"]):
         return "buy"
     if any(k in op for k in ["sell", "매도", "underperform", "underweight", "비중축소", "reduce"]):
         return "sell"
-    if op in ("", "-", "없음", "nr", "not rated"):
+    if op in ("", "-", "없음", "nr", "not rated", "투자의견없음"):
         return "none"
     return "hold"
 
@@ -190,26 +190,24 @@ def classify(op):
 def research():
     out = {}
     try:
-        comp = parse_list("company", config.MAX_COMPANY)
+        comp = fetch_kind("company", config.MAX_COMPANY)
         for r in comp:
-            r["stock"] = r.pop("category", "")
-            company_detail(r)
+            r["close"] = None
             if r.get("code"):
                 try:
                     a = analyze(r["code"])
                     r["close"] = a["close"] if a else None
                 except Exception:  # noqa: BLE001
-                    r["close"] = None
-            time.sleep(0.3)
+                    pass
         out["company"] = comp
         STATUS.append(f"네이버 종목분석 {len(comp)}건")
     except Exception as e:  # noqa: BLE001
         out["company"] = []
         STATUS.append(f"네이버 종목분석 실패({type(e).__name__})")
-    for kind, label in [("industry", "산업분석"), ("market_info", "시황정보"),
+    for kind, label in [("industry", "산업분석"), ("market", "시황정보"),
                         ("invest", "투자정보"), ("economy", "경제분석")]:
         try:
-            out[kind] = parse_list(kind, config.MAX_OTHER)
+            out[kind] = fetch_kind(kind, config.MAX_OTHER)
             STATUS.append(f"{label} {len(out[kind])}건")
         except Exception as e:  # noqa: BLE001
             out[kind] = []
@@ -351,15 +349,24 @@ def morning():
     comp = res.get("company", [])
     buckets = {"buy": [], "hold": [], "sell": [], "none": []}
     for r in comp:
-        buckets[classify(r.get("opinion"))].append(r)
+        c = classify(r.get("opinion"))
+        if c != "sell" and r.get("target") and r.get("prev_target") and r["target"] < r["prev_target"]:
+            buckets["sell"].append(r)   # 목표가 하향은 C에도 표시
+            if c == "buy":
+                continue
+        buckets[c].append(r)
 
     def comp_rows(rs):
         out = []
         for r in rs:
             up = pct(r["target"], r["close"]) if r.get("target") and r.get("close") else None
+            chg = ""
+            if r.get("target") and r.get("prev_target") and r["target"] != r["prev_target"]:
+                chg = ("▲ " if r["target"] > r["prev_target"] else "▼ ") + fmt_num(r["prev_target"]) + "→"
             out.append([e(r.get("stock")), e(r.get("broker")), e(r.get("opinion") or "–"),
-                        fmt_num(r.get("target")), fmt_num(r.get("close")), fmt_pct(up),
-                        link(r["title"], r["url"]), link("PDF", r.get("pdf")), e(r.get("date"))])
+                        e(chg) + fmt_num(r.get("target")), fmt_num(r.get("close")), fmt_pct(up),
+                        link(r["title"], r["url"]) + f"<br><span class='note'>{e(r.get('summary'))}</span>",
+                        link("PDF", r.get("pdf")), e(r.get("date"))])
         return out
     hdr = ["종목", "증권사", "투자의견", "목표가", "최근 종가", "상승여력", "제목", "원문", "날짜"]
     buy = sorted(buckets["buy"], key=lambda r: -(pct(r["target"], r["close"]) or -999)
@@ -367,7 +374,7 @@ def morning():
     parts.append("<h2>A. 매수 의견 종목</h2><p class='note'>상승여력 = 목표가 ÷ 최근 종가. 목표가는 보통 6~12개월 기준입니다.</p>"
                  + table(hdr, comp_rows(buy), num_cols=(3, 4, 5)))
     parts.append("<h2>B. 보유(중립) 의견 종목</h2>" + table(hdr, comp_rows(buckets["hold"]), num_cols=(3, 4, 5)))
-    parts.append("<h2>C. 매도·비중축소 의견 종목</h2>" + table(hdr, comp_rows(buckets["sell"]), num_cols=(3, 4, 5)))
+    parts.append("<h2>C. 매도·비중축소 · 목표가 하향</h2>" + table(hdr, comp_rows(buckets["sell"]), num_cols=(3, 4, 5)))
     if buckets["none"]:
         parts.append("<h2>기타 (의견 없음/확인 불가)</h2>" + table(hdr, comp_rows(buckets["none"]), num_cols=(3, 4, 5)))
 
@@ -376,12 +383,12 @@ def morning():
     parts.append("<h2>D. 산업분석 (국내 업종 ETF 참고)</h2>"
                  "<p class='note'>⭐ = 보유 업종(보험·증권·금융·금리) 관련</p>"
                  + table(["", "업종", "제목", "증권사", "원문", "날짜"],
-                         [["⭐" if r in mine else "", e(r.get("category")), link(r["title"], r["url"]),
+                         [["⭐" if r in mine else "", e(r.get("category")), link(r["title"], r["url"]) + f"<br><span class='note'>{e(r.get('summary'))}</span>",
                            e(r["broker"]), link("PDF", r.get("pdf")), e(r["date"])] for r in ind]))
-    for kind, label in [("market_info", "시황정보"), ("invest", "투자정보"), ("economy", "경제분석 (금리·환율)")]:
+    for kind, label in [("market", "시황정보"), ("invest", "투자정보"), ("economy", "경제분석 (금리·환율)")]:
         rs = res.get(kind, [])
         parts.append(f"<h2>{label}</h2>" + table(["제목", "증권사", "원문", "날짜"],
-                     [[link(r["title"], r["url"]), e(r["broker"]), link("PDF", r.get("pdf")), e(r["date"])] for r in rs]))
+                     [[link(r["title"], r["url"]) + f"<br><span class='note'>{e(r.get('summary'))}</span>", e(r["broker"]), link("PDF", r.get("pdf")), e(r["date"])] for r in rs]))
 
     parts.append("<h2>원문 보기</h2><ul>" + "".join(
         f"<li>{link(k, v)}</li>" for k, v in config.NAVER_LINKS.items()) + "</ul>")
