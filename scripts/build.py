@@ -136,7 +136,7 @@ def api_json(path):
 
 def strip_html(t, n=220):
     t = re.sub(r"<br\s*/?>|</p>", " ", t or "")
-    t = html.unescape(re.sub(r"<[^>]+>", "", t))
+    t = html.unescape(html.unescape(re.sub(r"<[^>]+>", "", t))).strip('" ')
     t = re.sub(r"\s+", " ", t).strip()
     return t[:n] + ("…" if len(t) > n else "")
 
@@ -168,7 +168,7 @@ def fetch_kind(kind, limit, detail=True):
                 item["summary"] = strip_html(d.get("content"))
                 item["opinion"] = d.get("opinion") or ""
                 item["target"] = to_int(d.get("goalPrice"))
-                item["prev_target"] = to_int(d.get("prevGoalPrice"))
+                item["prev_target"] = None  # prevGoalPrice는 실제로 작성일 주가라 사용 안 함
             except Exception as e:  # noqa: BLE001
                 print("상세 실패", kind, item["id"], e)
             time.sleep(0.2)
@@ -374,7 +374,7 @@ def morning():
     parts.append("<h2>A. 매수 의견 종목</h2><p class='note'>상승여력 = 목표가 ÷ 최근 종가. 목표가는 보통 6~12개월 기준입니다.</p>"
                  + table(hdr, comp_rows(buy), num_cols=(3, 4, 5)))
     parts.append("<h2>B. 보유(중립) 의견 종목</h2>" + table(hdr, comp_rows(buckets["hold"]), num_cols=(3, 4, 5)))
-    parts.append("<h2>C. 매도·비중축소 · 목표가 하향</h2>" + table(hdr, comp_rows(buckets["sell"]), num_cols=(3, 4, 5)))
+    parts.append("<h2>C. 매도·비중축소 의견 종목</h2>" + table(hdr, comp_rows(buckets["sell"]), num_cols=(3, 4, 5)))
     if buckets["none"]:
         parts.append("<h2>기타 (의견 없음/확인 불가)</h2>" + table(hdr, comp_rows(buckets["none"]), num_cols=(3, 4, 5)))
 
