@@ -1,4 +1,7 @@
-company 200 126547
-industry 200 127552
-3
-charSet=
+<!DOCTYPE html><html lang="ko" class="" data-theme="light"><head><meta charSet="utf-8"/><meta name="viewport" content="width=1366, initial-scale=1.0, user-scalable=yes"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="https://ssl.pstatic.net/imgstock/fn/real/pc/_next/static/css/9349f3b462cc41d1.css" data-precedence="next"/><link rel="stylesheet" href="https://ssl.pstatic.net/imgstock/fn/real/pc/_next/static/css/e3ec63edec28ae7b.css" data-precedence="next"/><link rel="stylesheet" href="https://ssl.pstatic.net/imgstock/fn/real/pc/_next/static/cs
+== https://m.stock.naver.com/api/research/company?page=1&pageSize=5
+[{"researchCategory":"종목분석","category":"종목분석","itemCode":"012450","itemName":"한화에어로스페이스","researchId":96882,"title":"3Q에 대한 걱정 대신 4Q에 걸어볼 기대","brokerName":"DS투자증권","writeDate":"2026-10-20","readCount":"2806","endUrl":"https://m.stock.naver.com/research/company/96882"},{"researchCategory":"종목분석","category":"종목분석","itemCode":"006280","itemName":"녹십자","researchId":96881,"title":"3Q26 Pre: 2분기 부진을 딛고","brokerName":"DS투자증권","writeDate":"2026-10-20","readCount":"1733","endUrl":"https://m.stock.naver.com/research/company/96881"},{"researchCategory":"종목분석","category":"종목분석"
+== https://m.stock.naver.com/front-api/research/company?page=1&pageSize=5
+{"message":"Route GET:/front-api/research/company?page=1&pageSize=5 not found","error":"Not Found","statusCode":404}
+== https://stock.naver.com/api/research/company?page=1
+{"message":"Route GET:/api/research/company?page=1 not found","error":"Not Found","statusCode":404}
