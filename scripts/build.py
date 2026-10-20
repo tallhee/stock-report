@@ -249,6 +249,7 @@ td.n{text-align:right;font-variant-numeric:tabular-nums}tr:last-child td{border-
 td.t{white-space:normal;min-width:220px}
 .up{color:var(--up)}.down{color:var(--down)}a{color:var(--accent)}
 ul{padding-left:20px}li{margin:3px 0}
+.ch{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-bottom:4px}.nums{font-size:13.5px;margin-bottom:4px}
 .pill{display:inline-block;font-size:12px;padding:1px 8px;border-radius:99px;border:1px solid var(--line);color:var(--mute)}
 """
 
@@ -368,15 +369,30 @@ def morning():
                         link(r["title"], r["url"]) + f"<br><span class='note'>{e(r.get('summary'))}</span>",
                         link("PDF", r.get("pdf")), e(r.get("date"))])
         return out
-    hdr = ["종목", "증권사", "투자의견", "목표가", "최근 종가", "상승여력", "제목", "원문", "날짜"]
+    hdr = None
+
+    def cards(rs):
+        if not rs:
+            return "<p class='note'>해당 없음</p>"
+        out = ""
+        for r in rs:
+            up = pct(r["target"], r["close"]) if r.get("target") and r.get("close") else None
+            out += (f"<div class='card'><div class='ch'><b>{e(r.get('stock'))}</b>"
+                    f"<span class='pill'>{e(r.get('opinion') or '의견없음')}</span>"
+                    f"<span class='note'>{e(r.get('broker'))} · {e(r.get('date'))}</span></div>"
+                    f"<div class='nums'>목표가 <b>{fmt_num(r.get('target'))}</b> · 최근 종가 {fmt_num(r.get('close'))}"
+                    f" · 상승여력 {fmt_pct(up)}</div>"
+                    f"<div>{link(r['title'], r['url'])} · {link('PDF', r.get('pdf'))}</div>"
+                    f"<p class='note' style='margin:6px 0 0'>{e(r.get('summary'))}</p></div>")
+        return out
     buy = sorted(buckets["buy"], key=lambda r: -(pct(r["target"], r["close"]) or -999)
                  if r.get("target") and r.get("close") else 999)
     parts.append("<h2>A. 매수 의견 종목</h2><p class='note'>상승여력 = 목표가 ÷ 최근 종가. 목표가는 보통 6~12개월 기준입니다.</p>"
-                 + table(hdr, comp_rows(buy), num_cols=(3, 4, 5)))
-    parts.append("<h2>B. 보유(중립) 의견 종목</h2>" + table(hdr, comp_rows(buckets["hold"]), num_cols=(3, 4, 5)))
-    parts.append("<h2>C. 매도·비중축소 의견 종목</h2>" + table(hdr, comp_rows(buckets["sell"]), num_cols=(3, 4, 5)))
+                 + cards(buy))
+    parts.append("<h2>B. 보유(중립) 의견 종목</h2>" + cards(buckets["hold"]))
+    parts.append("<h2>C. 매도·비중축소 의견 종목</h2>" + cards(buckets["sell"]))
     if buckets["none"]:
-        parts.append("<h2>기타 (의견 없음/확인 불가)</h2>" + table(hdr, comp_rows(buckets["none"]), num_cols=(3, 4, 5)))
+        parts.append("<h2>기타 (의견 없음/확인 불가)</h2>" + cards(buckets["none"]))
 
     ind = res.get("industry", [])
     mine = [r for r in ind if any(k in r["title"] + r.get("category", "") for k in config.SECTOR_KEYWORDS)]
