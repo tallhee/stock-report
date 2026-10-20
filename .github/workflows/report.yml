@@ -1,0 +1,76 @@
+name: 데일리 증권 리포트
+
+on:
+  schedule:
+    - cron: "45 23 * * 0-4"   # 평일 08:45 KST (월~금) — GitHub 지연 감안해 5분 일찍
+    - cron: "0 5 * * 1-5"     # 평일 14:00 KST — 장중 급락 체크
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "morning 또는 dip"
+        default: "morning"
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: report
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install requests beautifulsoup4
+
+      - name: 모드 결정
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "0 5 * * 1-5" ]; then
+            echo "mode=dip" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=morning" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 페이지 생성
+        id: build
+        run: python scripts/build.py ${{ steps.mode.outputs.mode }}
+
+      - name: 커밋
+        run: |
+          git config user.name "report-bot"
+          git config user.email "report-bot@users.noreply.github.com"
+          git add docs
+          git diff --cached --quiet || git commit -m "report: $(TZ=Asia/Seoul date +%F) ${{ steps.mode.outputs.mode }}"
+          git push
+
+      - name: 급락 알림 (GitHub 이슈 → 앱/메일 알림)
+        if: steps.build.outputs.dip == 'yes'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          URL="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/reports/${{ steps.build.outputs.slug }}.html"
+          if [ "${{ steps.mode.outputs.mode }}" = "dip" ]; then
+            HEAD="장 마감(15:30) 전 확인하세요"
+          else
+            HEAD="오전 9시대 매수 체크 확인하세요"
+          fi
+          gh issue create \
+            --title "${{ steps.build.outputs.title }}" \
+            --body "🚨 ${HEAD}
+
+          조건: ${{ steps.build.outputs.reasons }}
+
+          👉 ${URL}
+
+          (투자 권유가 아닌 참고 자료입니다)" \
+            --assignee "${{ github.repository_owner }}"
