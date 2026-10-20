@@ -1,7 +1,4 @@
 company 200 126547
-iconv: illegal input sequence at position 12730
 industry 200 127552
-iconv: illegal input sequence at position 12732
-iconv: illegal input sequence at position 12730
-iconv: illegal input sequence at position 11569
-iconv: illegal input sequence at position 12730
+3
+charSet=
